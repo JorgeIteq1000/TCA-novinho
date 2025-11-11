@@ -1,62 +1,142 @@
 // src/pages/Dashboard.tsx
-// (Arquivo completo com a correção para Relatórios)
+// (Arquivo completo com busca de sugestões em tempo real)
 
-// --- MUDANÇA 1: Importar o 'useAuth' e 'toast' ---
-import { useState } from "react";
+import { useState, useEffect } from "react"; // <-- MUDANÇA: Adicionado useEffect
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext"; // <-- ADICIONADO
-import { toast } from "sonner"; // <-- ADICIONADO
-// --- FIM DA MUDANÇA 1 ---
-
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
 import SearchModule from "@/components/SearchModule";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, User } from "lucide-react"; // <-- MUDANÇA: Adicionado User
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 
+// --- MUDANÇA: Adicionar Popover e Command ---
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+// --- FIM DA MUDANÇA ---
+
 // Tipo para os resultados de todas as seções
 type AllResultsState = Record<string, any[]>;
+
+// --- MUDANÇA: Tipo para as Sugestões ---
+interface Suggestion {
+  cod_pessoa: string;
+  nome: string;
+}
+// --- FIM DA MUDANÇA ---
 
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("Pessoa");
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  // --- MUDANÇA 2: Pegar o 'user' do contexto de autenticação ---
-  const { user } = useAuth(); // <-- ADICIONADO
-  // --- FIM DA MUDANÇA 2 ---
-
-  // --- Estados que subiram do SearchModule ---
+  // --- Estados da Busca Global ---
   const [query, setQuery] = useState("");
   const [isCpfSearch, setIsCpfSearch] = useState(false);
   const [allResults, setAllResults] = useState<AllResultsState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // --- Fim dos estados ---
 
-  // --- Lógica de busca que subiu ---
-  const handleSearch = async () => {
-    if (!query.trim()) {
-      // Se a busca estiver vazia, limpa os resultados
+  // --- MUDANÇA: Estados para Sugestões ---
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  // --- FIM DA MUDANÇA ---
+
+  // --- MUDANÇA: Debounce para a busca de sugestões ---
+  useEffect(() => {
+    // Define um timer de 300ms
+    const handler = setTimeout(() => {
+      // Só atualiza o 'debouncedQuery' depois que o usuário parar de digitar
+      setDebouncedQuery(query);
+    }, 300);
+
+    // Limpa o timer se o usuário digitar novamente
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [query]); // Roda toda vez que a 'query' (digitação) muda
+
+  // --- MUDANÇA: Efeito para buscar sugestões ---
+  useEffect(() => {
+    // Função que busca as sugestões na nova API
+    const fetchSuggestions = async () => {
+      // Só busca se tiver 3+ caracteres
+      if (debouncedQuery.length < 3) {
+        setSuggestions([]);
+        setIsPopoverOpen(false);
+        return;
+      }
+
+      console.log(
+        `[Modo Turbo Sugestões] Buscando sugestões para: ${debouncedQuery}`
+      );
+      setIsSuggestionsLoading(true);
+
+      try {
+        const apiUrl = `http://localhost:5000/api/search/suggestions?q=${encodeURIComponent(
+          debouncedQuery
+        )}&cpf=${isCpfSearch}`;
+
+        const response = await apiFetch(apiUrl);
+        if (!response.ok) {
+          throw new Error("Erro ao buscar sugestões");
+        }
+        const data: Suggestion[] = await response.json();
+        setSuggestions(data);
+        setIsPopoverOpen(true); // Abre o Popover
+        console.log("[Modo Turbo Sugestões] Sugestões recebidas:", data);
+      } catch (err) {
+        console.error("[Modo Turbo Sugestões] Falha:", err);
+        setSuggestions([]);
+        setIsPopoverOpen(false);
+      } finally {
+        setIsSuggestionsLoading(false);
+      }
+    };
+
+    fetchSuggestions();
+  }, [debouncedQuery, isCpfSearch]); // Roda quando o 'debouncedQuery' ou o modo CPF mudam
+  // --- FIM DA MUDANÇA ---
+
+  // --- MUDANÇA: Refatorado para ser uma função interna reutilizável ---
+  const handleSearchInternal = async (
+    searchTerm: string,
+    searchIsCpf: boolean
+  ) => {
+    if (!searchTerm.trim()) {
       setAllResults(null);
       setError(null);
       return;
     }
 
     console.log(
-      `[Modo Turbo Dashboard] Buscando... Query: ${query}, Modo CPF: ${isCpfSearch}`
+      `[Modo Turbo Dashboard] BUSCA GLOBAL... Query: ${searchTerm}, Modo CPF: ${searchIsCpf}`
     );
-    setIsLoading(true);
+    setIsLoading(true); // Loading principal
     setError(null);
+    setIsPopoverOpen(false); // Fecha o popover de sugestões
+    setSuggestions([]); // Limpa sugestões
 
     try {
       const apiUrl = `http://localhost:5000/api/search/all?q=${encodeURIComponent(
-        query
-      )}&cpf=${isCpfSearch}`;
+        searchTerm
+      )}&cpf=${searchIsCpf}`;
 
       console.log(`[Modo Turbo Dashboard] Chamando API Global: ${apiUrl}`);
-
       const response = await apiFetch(apiUrl);
 
       if (!response.ok) {
@@ -69,8 +149,7 @@ export default function Dashboard() {
 
       const data: AllResultsState = await response.json();
       console.log("[Modo Turbo Dashboard] Dados recebidos:", data);
-
-      setAllResults(data); // Armazena o objeto completo de resultados
+      setAllResults(data);
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(
@@ -78,7 +157,6 @@ export default function Dashboard() {
           err.message,
           err
         );
-        // Não mostramos o erro de 'autorização' porque a api.ts já deslogou
         if (!err.message.includes("autorização")) {
           setError(`Erro ao buscar dados: ${err.message}.`);
         }
@@ -87,120 +165,185 @@ export default function Dashboard() {
         setError("Ocorreu um erro desconhecido.");
       }
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Para o loading principal
     }
   };
 
+  // --- MUDANÇA: Funções de clique e tecla atualizadas ---
+  // Botão "Buscar" usa o que está no estado atual
+  const handleSearchClick = () => {
+    console.log("[Modo Turbo Dashboard] Botão 'Buscar' clicado.");
+    handleSearchInternal(query, isCpfSearch);
+  };
+
+  // Enter no input usa o que está no estado atual
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      handleSearch();
+      console.log("[Modo Turbo Dashboard] 'Enter' pressionado.");
+      handleSearchInternal(query, isCpfSearch);
     }
   };
-  // --- Fim da lógica de busca ---
 
-  // --- MUDANÇA 3: Lógica de navegação e permissão ATUALIZADA ---
+  // Clique na sugestão
+  const handleSuggestionClick = (suggestion: Suggestion) => {
+    console.log("[Modo Turbo Dashboard] Sugestão selecionada:", suggestion);
+    // 1. Põe o NOME no input (para o usuário ver)
+    setQuery(suggestion.nome);
+    // 2. Fecha o popover e limpa as sugestões
+    setIsPopoverOpen(false);
+    setSuggestions([]);
+    // 3. Roda a busca global usando a MATRÍCULA (cod_pessoa)
+    //    e garantindo que o modo CPF esteja FALSO
+    handleSearchInternal(suggestion.cod_pessoa, false);
+  };
+  // --- FIM DA MUDANÇA ---
+
   const handleSectionChange = (section: string) => {
-    // 1. Checa se o destino é 'Configuracoes'
     if (section === "Configuracoes") {
       console.log("[Modo Turbo Dashboard] Navegando para /configuracoes...");
       navigate("/configuracoes");
-      return; // Para a execução aqui
+      return;
     }
-
-    // 2. CHECAGEM NOVA: Checa se o destino é 'Relatórios'
     if (section === "Relatórios") {
-      // Se o usuário existir E NÃO for Admin
       if (user && user.role !== "Admin") {
         console.warn(
           "[Modo Turbo Dashboard] Acesso negado a Relatórios. Usuário não é Admin."
         );
-        // Mostra o mesmo toast do AdminRoute
         toast.error("Acesso Negado", {
           description: "Você não tem permissão para acessar esta seção.",
         });
-        return; // Para a execução aqui, impedindo a troca de aba
+        return;
       }
     }
-
-    // 3. Se passou em tudo, apenas muda a aba local
     setActiveSection(section);
     console.log(`[Modo Turbo Dashboard] Mudou para aba: ${section}`);
   };
-  // --- FIM DA MUDANÇA 3 ---
 
   return (
     <div className="min-h-screen bg-background">
       <Sidebar
         activeSection={activeSection}
-        onSectionChange={handleSectionChange} // Esta função agora está correta
+        onSectionChange={handleSectionChange}
       />
 
       <main className="ml-64 p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* --- Barra de Busca (agora no Dashboard) --- */}
           <div className="bg-card rounded-lg p-6 shadow-card">
             <h2 className="text-2xl font-bold mb-6 text-foreground">
               Buscar Aluno (Global)
             </h2>
 
+            {/* --- MUDANÇA: Envolver a busca no Popover --- */}
             <div className="flex flex-col gap-4">
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder={`Digite ${
-                      isCpfSearch ? "o CPF..." : "o Nome ou Matrícula..."
-                    }`}
-                    className="w-full pl-12 pr-4 py-3 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
-                  />
-                </div>
-                <Button
-                  onClick={handleSearch}
-                  disabled={isLoading}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground px-8"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Buscando...
-                    </>
-                  ) : (
-                    "Buscar"
-                  )}
-                </Button>
-              </div>
+              <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                <div className="flex gap-3">
+                  <PopoverTrigger asChild>
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder={`Digite ${
+                          isCpfSearch ? "o CPF..." : "o Nome ou Matrícula..."
+                        }`}
+                        className="w-full pl-12 pr-12 py-3 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+                        autoComplete="off" // Desliga o autocomplete do navegador
+                      />
+                      {/* Loader para as sugestões */}
+                      {isSuggestionsLoading && (
+                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+                  </PopoverTrigger>
 
-              {/* --- Bloco do Checkbox --- */}
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="cpf-search"
-                  checked={isCpfSearch}
-                  onCheckedChange={(checked) =>
-                    setIsCpfSearch(checked as boolean)
-                  }
-                />
-                <Label
-                  htmlFor="cpf-search"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  <Button
+                    onClick={handleSearchClick}
+                    disabled={isLoading}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground px-8"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Buscando...
+                      </>
+                    ) : (
+                      "Buscar"
+                    )}
+                  </Button>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="cpf-search"
+                    checked={isCpfSearch}
+                    onCheckedChange={(checked) => {
+                      setIsCpfSearch(checked as boolean);
+                      console.log(
+                        `[Modo Turbo Dashboard] Modo CPF alterado para: ${checked}`
+                      );
+                    }}
+                  />
+                  <Label
+                    htmlFor="cpf-search"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Buscar apenas por CPF
+                  </Label>
+                </div>
+
+                {/* Conteúdo do Popover (Lista de Sugestões) */}
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
                 >
-                  Buscar apenas por CPF
-                </Label>
-              </div>
+                  <Command>
+                    <CommandList>
+                      <CommandEmpty>
+                        {isSuggestionsLoading
+                          ? "Buscando..."
+                          : "Nenhum resultado encontrado."}
+                      </CommandEmpty>
+                      {/* Mapeia e renderiza as sugestões */}
+                      {suggestions.map((suggestion) => (
+                        <CommandItem
+                          key={suggestion.cod_pessoa}
+                          // O 'value' é usado pelo Command para filtrar,
+                          // então colocamos nome e matrícula
+                          value={`${suggestion.nome} ${suggestion.cod_pessoa}`}
+                          onSelect={() => handleSuggestionClick(suggestion)}
+                          className="cursor-pointer"
+                        >
+                          <User className="mr-2 h-4 w-4" />
+                          <span>{suggestion.nome}</span>
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {suggestion.cod_pessoa}
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
+            {/* --- FIM DA MUDANÇA --- */}
           </div>
-          {/* --- Fim da Barra de Busca --- */}
 
           <SearchModule
             type={activeSection}
-            query={query} // Passa a query para saber o que foi buscado
-            results={allResults ? allResults[activeSection] : null} // Passa SÓ os resultados desta seção
-            isLoading={isLoading} // Passa o estado de loading
-            error={error} // Passa o estado de erro
-            onRefreshData={handleSearch}
+            query={query}
+            results={allResults ? allResults[activeSection] : null}
+            isLoading={isLoading}
+            error={error}
+            onRefreshData={() =>
+              handleSearchInternal(
+                // Ao recarregar dados (ex: salvar ocorrência),
+                // busca pelo último resultado de 'Pessoa' se existir
+                allResults?.Pessoa?.[0]?.cod_pessoa || query,
+                false // Sempre recarrega pelo ID
+              )
+            }
             pessoaInfo={
               allResults && allResults.Pessoa && allResults.Pessoa.length > 0
                 ? allResults.Pessoa[0]

@@ -7,11 +7,8 @@ import io
 import csv
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
-# --- MUDANÇA: Imports de Autenticação Atualizados ---
-# 'verify_jwt_in_request' e 'wraps' não são mais necessários
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, jwt_required, JWTManager
 from werkzeug.security import check_password_hash, generate_password_hash 
-# --- FIM DA MUDANÇA ---
 
 # --- Configuração do Logging ---
 logging.basicConfig(level=logging.DEBUG)
@@ -88,7 +85,7 @@ def execute_insert(query, params):
         pool_conexoes.put(conexao)
 
 
-# --- Dicionário de Queries (Seu código original, 100% intacto) ---
+# --- Dicionário de Queries (Sem alteração) ---
 queries = {
     "Pessoa": (
         # 1. suggest_query (nome, matricula)
@@ -503,10 +500,7 @@ app = Flask(__name__)
 CORS(app) 
 app.config["JWT_SECRET_KEY"] = "SEU_SEGREDO_SUPER_SECRETO_MUDE_ISSO_AGORA"
 jwt = JWTManager(app)
-app.config["JWT_ALGORITHM"] = "HS256" # Adicione esta linha
-
-# --- Decorador de permissão de Admin (REMOVIDO E SUBSTITUÍDO POR LÓGICA INTERNA) ---
-
+app.config["JWT_ALGORITHM"] = "HS256"
 
 # --- Endpoint de LOGIN (Sem alteração) ---
 @app.route('/api/login', methods=['POST'])
@@ -556,7 +550,6 @@ def login():
 @app.route('/api/search/all', methods=['GET'])
 @jwt_required()
 def search_all_sections():
-    # ... (Seu código de busca, 100% sem alteração) ...
     query_param = request.args.get('q')
     is_cpf_search = request.args.get('cpf') == 'true'
     logging.info(f"[API GLOBAL] Recebida requisição, Query: {query_param}, BuscaCPF: {is_cpf_search}")
@@ -602,6 +595,52 @@ def search_all_sections():
             all_results[section] = [] 
     logging.info(f"[API GLOBAL] Retornando resultados para {len(all_results)} seções.")
     return jsonify(all_results)
+
+# --- (NOVO) Endpoint /api/search/suggestions (PROTEGIDO) ---
+@app.route('/api/search/suggestions', methods=['GET'])
+@jwt_required()
+def search_suggestions():
+    query_param = request.args.get('q')
+    is_cpf_search = request.args.get('cpf') == 'true'
+    
+    if not query_param or len(query_param) < 3:
+        # Não busca por menos de 3 caracteres
+        return jsonify([])
+
+    logging.info(f"[API SUGESTÕES] Buscando por: {query_param}, Modo CPF: {is_cpf_search}")
+    
+    try:
+        if is_cpf_search:
+            # Se for CPF, usa a query de CPF da "Pessoa"
+            sql_query = queries["Pessoa"][3] # 4. cpf_query
+            params = (f'%{query_param}%',)
+        else:
+            # Se não, usa a query de sugestão padrão (nome ou matricula)
+            sql_query = queries["Pessoa"][0] # 1. suggest_query
+            param_like = f'%{query_param}%'
+            params = (param_like, param_like)
+            
+        results = search_database(sql_query, params)
+        
+        # O frontend espera 'cod_pessoa' e 'nome'
+        # A suggest_query[0] já retorna isso. A cpf_query[3] retorna mais,
+        # então vamos garantir que o formato seja o
+        # { "cod_pessoa": "123", "nome": "Aluno" }
+        
+        # Limita a 10 resultados para o dropdown
+        sugestoes_formatadas = [
+            {"cod_pessoa": row["cod_pessoa"], "nome": row["nome"]}
+            for row in results[:10]
+        ]
+        
+        logging.debug(f"[API SUGESTÕES] Retornando {len(sugestoes_formatadas)} sugestões.")
+        return jsonify(sugestoes_formatadas)
+        
+    except Exception as e:
+        logging.error(f"[API SUGESTÕES] Erro ao buscar sugestões: {e}")
+        return jsonify({"error": str(e)}), 500
+# --- FIM DO NOVO ENDPOINT ---
+
 
 # --- Endpoint /api/ocorrencia/nova (PROTEGIDO E AUTOMATIZADO) ---
 @app.route('/api/ocorrencia/nova', methods=['POST'])
@@ -654,11 +693,9 @@ MASTER_COLUMN_MAP = {
 @app.route('/api/report_filters/cursos', methods=['GET'])
 @jwt_required()
 def get_cursos():
-    # --- MUDANÇA: Verificação de Admin INTERNA ---
     claims = get_jwt()
     if claims.get("role") != "Admin":
         return jsonify({"error": "Acesso restrito a administradores"}), 403
-    # --- FIM DA MUDANÇA ---
     
     try:
         query = "SELECT DISTINCT nome FROM dbo.curso WHERE nome IS NOT NULL AND nome <> '' ORDER BY nome"
@@ -671,11 +708,9 @@ def get_cursos():
 @app.route('/api/report_filters/consultores', methods=['GET'])
 @jwt_required()
 def get_consultores():
-    # --- MUDANÇA: Verificação de Admin INTERNA ---
     claims = get_jwt()
     if claims.get("role") != "Admin":
         return jsonify({"error": "Acesso restrito a administradores"}), 403
-    # --- FIM DA MUDANÇA ---
 
     try:
         query = "SELECT DISTINCT consultor FROM dbo.matricula WHERE consultor IS NOT NULL AND consultor <> '' ORDER BY consultor"
@@ -688,14 +723,11 @@ def get_consultores():
 @app.route('/api/report_builder', methods=['GET'])
 @jwt_required()
 def report_builder():
-    # --- MUDANÇA: Verificação de Admin INTERNA ---
     claims = get_jwt()
     if claims.get("role") != "Admin":
         return jsonify({"error": "Acesso restrito a administradores"}), 403
-    # --- FIM DA MUDANÇA ---
     
     try:
-        # ... (Sua lógica de relatório, 100% sem alteração) ...
         requested_cols = request.args.get('cols', '').split(',')
         curso_filter = request.args.get('curso', 'Todos')
         consultor_filter = request.args.get('consultor', 'Todos')
@@ -762,16 +794,13 @@ def report_builder():
         return jsonify({"error": str(e)}), 500
 
 
-# --- NOVOS ENDPOINTS DE GERENCIAMENTO DE COLABORADORES (PROTEGIDOS COM ADMIN) ---
-
+# --- ENDPOINTS DE GERENCIAMENTO DE COLABORADORES (PROTEGIDOS COM ADMIN) ---
 @app.route('/api/colaboradores', methods=['GET'])
 @jwt_required()
 def get_colaboradores():
-    # --- MUDANÇA: Verificação de Admin INTERNA ---
     claims = get_jwt()
     if claims.get("role") != "Admin":
         return jsonify({"error": "Acesso restrito a administradores"}), 403
-    # --- FIM DA MUDANÇA ---
 
     try:
         query = "SELECT id, nome_colaborador, login, role, is_ativo FROM dbo.colaboradores ORDER BY nome_colaborador"
@@ -784,11 +813,9 @@ def get_colaboradores():
 @app.route('/api/colaboradores', methods=['POST'])
 @jwt_required()
 def create_colaborador():
-    # --- MUDANÇA: Verificação de Admin INTERNA ---
     claims = get_jwt()
     if claims.get("role") != "Admin":
         return jsonify({"error": "Acesso restrito a administradores"}), 403
-    # --- FIM DA MUDANÇA ---
 
     data = request.json
     nome = data.get('nome')
@@ -826,11 +853,9 @@ def create_colaborador():
 @app.route('/api/colaboradores/<int:id>', methods=['PUT'])
 @jwt_required()
 def update_colaborador(id):
-    # --- MUDANÇA: Verificação de Admin INTERNA ---
     claims = get_jwt()
     if claims.get("role") != "Admin":
         return jsonify({"error": "Acesso restrito a administradores"}), 403
-    # --- FIM DA MUDANÇA ---
 
     data = request.json
     role = data.get('role')
@@ -859,7 +884,6 @@ def update_colaborador(id):
     except Exception as e:
         logging.error(f"[API Colaboradores] Erro ao atualizar: {e}")
         return jsonify({"error": str(e)}), 500
-# --- FIM DAS MUDANÇAS ---
 
 
 if __name__ == '__main__':
