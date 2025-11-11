@@ -1,7 +1,9 @@
 // src/pages/Configuracoes.tsx
-// (Novo arquivo completo)
+// (Arquivo completo com a correção de navegação)
 
+// --- MUDANÇA 1: Importar o 'useNavigate' ---
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // <-- ADICIONADO
 import Sidebar from "@/components/Sidebar";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -43,6 +45,9 @@ interface Colaborador {
 }
 
 export default function Configuracoes() {
+  // --- MUDANÇA 2: Inicializar o 'navigate' ---
+  const navigate = useNavigate(); // <-- ADICIONADO
+
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,7 +62,9 @@ export default function Configuracoes() {
 
   // Função para buscar os dados
   const fetchColaboradores = async () => {
-    console.log("[Configurações] Buscando lista de colaboradores...");
+    console.log(
+      "[Modo Turbo Configuracoes] Buscando lista de colaboradores..."
+    );
     setIsLoading(true);
     try {
       const response = await apiFetch(API_URL);
@@ -65,7 +72,7 @@ export default function Configuracoes() {
         throw new Error("Falha ao buscar dados");
       }
       const data: Colaborador[] = await response.json();
-      console.log("[Configurações] Colaboradores recebidos:", data);
+      console.log("[Modo Turbo Configuracoes] Colaboradores recebidos:", data);
       setColaboradores(data);
     } catch (error) {
       console.error("[Configurações] Erro ao buscar colaboradores:", error);
@@ -88,7 +95,7 @@ export default function Configuracoes() {
       return;
     }
     console.log(
-      `[Configurações] Criando novo usuário: ${login}, Role: ${role}`
+      `[Modo Turbo Configuracoes] Criando novo usuário: ${login}, Role: ${role}`
     );
     setIsSubmitting(true);
     try {
@@ -117,7 +124,7 @@ export default function Configuracoes() {
       // Atualiza a lista
       fetchColaboradores();
     } catch (error) {
-      console.error("[Configurações] Erro ao criar:", error);
+      console.error("[Modo Turbo Configuracoes] Erro ao criar:", error);
       toast.error("Erro ao criar usuário.", {
         description: (error as Error).message,
       });
@@ -133,7 +140,7 @@ export default function Configuracoes() {
     value: "Admin" | "User" | boolean
   ) => {
     console.log(
-      `[Configurações] Atualizando ID ${id}: Campo ${field}, Valor ${value}`
+      `[Modo Turbo Configuracoes] Atualizando ID ${id}: Campo ${field}, Valor ${value}`
     );
 
     // Encontra o usuário no estado local para ter os dados completos
@@ -165,7 +172,7 @@ export default function Configuracoes() {
         colaboradores.map((c) => (c.id === id ? { ...c, [field]: value } : c))
       );
     } catch (error) {
-      console.error("[Configurações] Erro ao atualizar:", error);
+      console.error("[Modo Turbo Configuracoes] Erro ao atualizar:", error);
       toast.error("Erro ao atualizar usuário.", {
         description: (error as Error).message,
       });
@@ -176,15 +183,27 @@ export default function Configuracoes() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Usamos a prop 'Configuracoes' para a Sidebar saber qual item marcar */}
+      {/* --- MUDANÇA 3: Lógica da Sidebar corrigida --- */}
       <Sidebar
         activeSection={"Configuracoes"}
         onSectionChange={(section) => {
-          // Se o usuário clicar em outra seção, nós navegamos
-          window.location.href =
-            section === "Dashboard" ? "/" : `/${section.toLowerCase()}`;
+          // Se o usuário clicar em "Configuracoes", não faz nada (já estamos aqui)
+          if (section === "Configuracoes") {
+            console.log(
+              "[Modo Turbo Configuracoes] Já estou em Configurações."
+            );
+            return;
+          }
+
+          // Se clicar em QUALQUER outra aba (Pessoa, Documento, etc.),
+          // navega de volta para o Dashboard ("/") usando o navigate
+          console.log(
+            `[Modo Turbo Configuracoes] Navegando para o Dashboard (/) pois o usuário clicou em ${section}`
+          );
+          navigate("/");
         }}
       />
+      {/* --- FIM DA MUDANÇA --- */}
 
       <main className="ml-64 p-8">
         <div className="max-w-7xl mx-auto space-y-6">
