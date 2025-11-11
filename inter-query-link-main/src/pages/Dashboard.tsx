@@ -1,9 +1,13 @@
 // src/pages/Dashboard.tsx
-// (Arquivo completo com a correção de navegação)
+// (Arquivo completo com a correção para Relatórios)
 
-// --- MUDANÇA 1: Importar o 'useNavigate' ---
+// --- MUDANÇA 1: Importar o 'useAuth' e 'toast' ---
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; // <-- ADICIONADO
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext"; // <-- ADICIONADO
+import { toast } from "sonner"; // <-- ADICIONADO
+// --- FIM DA MUDANÇA 1 ---
+
 import Sidebar from "@/components/Sidebar";
 import SearchModule from "@/components/SearchModule";
 import { Search, Loader2 } from "lucide-react";
@@ -17,9 +21,11 @@ type AllResultsState = Record<string, any[]>;
 
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("Pessoa");
+  const navigate = useNavigate();
 
-  // --- MUDANÇA 2: Inicializar o 'navigate' ---
-  const navigate = useNavigate(); // <-- ADICIONADO
+  // --- MUDANÇA 2: Pegar o 'user' do contexto de autenticação ---
+  const { user } = useAuth(); // <-- ADICIONADO
+  // --- FIM DA MUDANÇA 2 ---
 
   // --- Estados que subiram do SearchModule ---
   const [query, setQuery] = useState("");
@@ -72,7 +78,10 @@ export default function Dashboard() {
           err.message,
           err
         );
-        setError(`Erro ao buscar dados: ${err.message}.`);
+        // Não mostramos o erro de 'autorização' porque a api.ts já deslogou
+        if (!err.message.includes("autorização")) {
+          setError(`Erro ao buscar dados: ${err.message}.`);
+        }
       } else {
         console.error("[Modo Turbo Dashboard] Erro desconhecido:", err);
         setError("Ocorreu um erro desconhecido.");
@@ -89,27 +98,35 @@ export default function Dashboard() {
   };
   // --- Fim da lógica de busca ---
 
-  // --- MUDANÇA 3: Lógica de navegação corrigida ---
+  // --- MUDANÇA 3: Lógica de navegação e permissão ATUALIZADA ---
   const handleSectionChange = (section: string) => {
-    // Se a seção for 'Configuracoes' (ou 'Relatórios'), navega para a rota dela
+    // 1. Checa se o destino é 'Configuracoes'
     if (section === "Configuracoes") {
       console.log("[Modo Turbo Dashboard] Navegando para /configuracoes...");
       navigate("/configuracoes");
-      return; // Importante parar a execução aqui!
+      return; // Para a execução aqui
     }
 
-    // NOTA: Se 'Relatórios' também virar uma página separada, adicione-a aqui:
-    // if (section === "Relatórios") {
-    //   console.log("[Modo Turbo Dashboard] Navegando para /relatorios...");
-    //   navigate("/relatorios");
-    //   return;
-    // }
+    // 2. CHECAGEM NOVA: Checa se o destino é 'Relatórios'
+    if (section === "Relatórios") {
+      // Se o usuário existir E NÃO for Admin
+      if (user && user.role !== "Admin") {
+        console.warn(
+          "[Modo Turbo Dashboard] Acesso negado a Relatórios. Usuário não é Admin."
+        );
+        // Mostra o mesmo toast do AdminRoute
+        toast.error("Acesso Negado", {
+          description: "Você não tem permissão para acessar esta seção.",
+        });
+        return; // Para a execução aqui, impedindo a troca de aba
+      }
+    }
 
-    // Se for qualquer outra seção, é uma aba de dados. Apenas atualiza o estado.
+    // 3. Se passou em tudo, apenas muda a aba local
     setActiveSection(section);
     console.log(`[Modo Turbo Dashboard] Mudou para aba: ${section}`);
   };
-  // --- FIM DA MUDANÇA ---
+  // --- FIM DA MUDANÇA 3 ---
 
   return (
     <div className="min-h-screen bg-background">
@@ -173,14 +190,10 @@ export default function Dashboard() {
                   Buscar apenas por CPF
                 </Label>
               </div>
-              {/* --- Fim da Mudança --- */}
             </div>
           </div>
           {/* --- Fim da Barra de Busca --- */}
 
-          {/* O SearchModule agora está seguro, pois 'activeSection' NUNCA
-            será "Configuracoes" (o componente navegará antes).
-          */}
           <SearchModule
             type={activeSection}
             query={query} // Passa a query para saber o que foi buscado
