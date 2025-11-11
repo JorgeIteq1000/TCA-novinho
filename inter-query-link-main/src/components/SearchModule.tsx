@@ -1,3 +1,6 @@
+// src/components/SearchModule.tsx
+// (Arquivo completo com filtros dinâmicos para Financeiro)
+
 import { useState, useMemo, FC, useEffect } from "react";
 import { Search, Loader2, Plus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +32,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// --- MUDANÇA: Imports de Card e Badge REMOVIDOS ---
+// (Não precisamos mais deles)
 
 // Imports da Tabela Arrastável
 import {
@@ -63,10 +69,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
-// --- MUDANÇA: Importar nosso "Mensageiro" ---
 import { apiFetch } from "@/lib/api";
-// --- FIM DA MUDANÇA ---
 
 interface SearchModuleProps {
   type: string;
@@ -219,7 +222,6 @@ export default function SearchModule({
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  // const [novoUsuario, setNovoUsuario] = useState(""); // <-- MUDANÇA: REMOVIDO
   const [novaDescricao, setNovaDescricao] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dataDeHoje = new Date().toLocaleDateString("pt-BR");
@@ -243,6 +245,13 @@ export default function SearchModule({
   const [selectedCurso, setSelectedCurso] = useState<string>("Todos");
   const [selectedConsultor, setSelectedConsultor] = useState<string>("Todos");
 
+  // --- MUDANÇA 2: Adicionar estados para os filtros financeiros ---
+  const [financeiroCursoFiltro, setFinanceiroCursoFiltro] =
+    useState<string>("Todos");
+  const [financeiroStatusFiltro, setFinanceiroStatusFiltro] =
+    useState<string>("Todos");
+  // --- FIM DA MUDANÇA 2 ---
+
   // useEffect para buscar filtros do Relatório
   useEffect(() => {
     if (type === "Relatórios" && !query) {
@@ -250,7 +259,6 @@ export default function SearchModule({
         console.log("[Modo Turbo] Buscando filtros de Curso e Consultor...");
         setReportLoading(true);
         try {
-          // --- MUDANÇA: Trocar 'fetch' por 'apiFetch' ---
           const cursoResponse = await apiFetch(
             "http://localhost:5000/api/report_filters/cursos"
           );
@@ -265,7 +273,6 @@ export default function SearchModule({
           const consultorResponse = await apiFetch(
             "http://localhost:5000/api/report_filters/consultores"
           );
-          // --- FIM DA MUDANÇA ---
           if (consultorResponse.ok) {
             const consultorData = await consultorResponse.json();
             setConsultorList(["Todos", ...consultorData]);
@@ -275,7 +282,6 @@ export default function SearchModule({
           }
         } catch (err) {
           console.error("Erro de rede ao buscar filtros:", err);
-          // apiFetch já vai deslogar se for 401, então só mostramos erro genérico
           if (!(err instanceof Error && err.message.includes("401"))) {
             toast.error("Não foi possível carregar os filtros de relatório.");
           }
@@ -291,14 +297,24 @@ export default function SearchModule({
     }
   }, [type, query]);
 
+  // --- MUDANÇA 3: useEffect para resetar os filtros financeiros ---
+  // Reseta os filtros sempre que a aba 'Financeiro' for carregada (ou os resultados mudarem)
+  useEffect(() => {
+    console.log("[Modo Turbo] Verificando reset de filtros financeiros...");
+    if (type === "Financeiro") {
+      setFinanceiroCursoFiltro("Todos");
+      setFinanceiroStatusFiltro("Todos");
+      console.log("[Modo Turbo] Filtros financeiros resetados.");
+    }
+  }, [type, results]); // Depende de 'type' e 'results'
+  // --- FIM DA MUDANÇA 3 ---
+
   // Função para Salvar Ocorrência (Atualizada)
   const handleSalvarOcorrencia = async () => {
-    // --- MUDANÇA: Validação de 'novoUsuario' removida ---
     if (!novaDescricao) {
       toast.error("Por favor, preencha o campo 'Ocorrência'.");
       return;
     }
-    // --- FIM DA MUDANÇA ---
 
     const matricula_aluno = pessoaInfo?.cod_pessoa;
     const nome_aluno = pessoaInfo?.nome;
@@ -309,13 +325,11 @@ export default function SearchModule({
       return;
     }
 
-    // --- MUDANÇA: Log simplificado ---
     console.log(
       `[Modo Turbo] Salvando Ocorrência... Mat: ${matricula_aluno}, Nome: ${nome_aluno}`
     );
     setIsSubmitting(true);
     try {
-      // --- MUDANÇA: Trocar 'fetch' por 'apiFetch' ---
       const response = await apiFetch(
         "http://localhost:5000/api/ocorrencia/nova",
         {
@@ -324,11 +338,9 @@ export default function SearchModule({
             matricula_aluno: matricula_aluno,
             nome_aluno: nome_aluno,
             descricao: novaDescricao,
-            // 'usuario' não é mais enviado, o backend pega do token
           }),
         }
       );
-      // --- FIM DA MUDANÇA ---
 
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -340,7 +352,6 @@ export default function SearchModule({
         "[Modo Turbo] Ocorrência salva, fechando modal e atualizando dados."
       );
       setIsFormOpen(false);
-      // setNovoUsuario(""); // <-- MUDANÇA: REMOVIDO
       setNovaDescricao("");
       onRefreshData();
     } catch (err: unknown) {
@@ -367,6 +378,57 @@ export default function SearchModule({
     if (key === "curso_nome") return "Curso";
     return key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   };
+
+  // --- MUDANÇA 4: Lógica do 'financialSummary' REMOVIDA ---
+  // (bloco 'useMemo' removido)
+
+  // --- MUDANÇA 5: Lógica para pegar opções de filtro ---
+  const financeiroFiltroOpcoes = useMemo(() => {
+    if (type !== "Financeiro" || !results) {
+      return { cursos: [], status: [] };
+    }
+    console.log("[Modo Turbo] Gerando opções de filtro para Financeiro...");
+
+    const cursos = new Set<string>();
+    const status = new Set<string>();
+
+    results.forEach((item) => {
+      // Adiciona o nome do curso e o status ao Set (evita duplicados)
+      if (item.nome_curso) cursos.add(item.nome_curso);
+      if (item.status) status.add(item.status);
+    });
+
+    // Retorna os arrays únicos com "Todos" no início
+    return {
+      cursos: ["Todos", ...Array.from(cursos).sort()],
+      status: ["Todos", ...Array.from(status).sort()],
+    };
+  }, [type, results]);
+  // --- FIM DA MUDANÇA 5 ---
+
+  // --- MUDANÇA 6: Lógica para filtrar os resultados ---
+  const filteredResults = useMemo(() => {
+    // Se não for a aba financeiro, ou não houver resultados, retorna os resultados originais
+    if (type !== "Financeiro" || !results) {
+      return results;
+    }
+
+    console.log(
+      `[Modo Turbo] Filtrando resultados financeiros... Curso: ${financeiroCursoFiltro}, Status: ${financeiroStatusFiltro}`
+    );
+
+    // Aplica os filtros
+    return results.filter((item) => {
+      const cursoMatch =
+        financeiroCursoFiltro === "Todos" ||
+        item.nome_curso === financeiroCursoFiltro;
+      const statusMatch =
+        financeiroStatusFiltro === "Todos" ||
+        item.status === financeiroStatusFiltro;
+      return cursoMatch && statusMatch;
+    });
+  }, [results, type, financeiroCursoFiltro, financeiroStatusFiltro]);
+  // --- FIM DA MUDANÇA 6 ---
 
   // Renderiza o conteúdo do modal de DETALHES (sem alterações)
   const renderModalContent = () => {
@@ -474,9 +536,6 @@ export default function SearchModule({
                 className="bg-muted/50"
               />
             </div>
-
-            {/* --- MUDANÇA: Bloco "Usuário" REMOVIDO --- */}
-
             <div className="space-y-2">
               <Label htmlFor="descricao">Ocorrência (Descrição)</Label>
               <Textarea
@@ -508,12 +567,71 @@ export default function SearchModule({
     );
   };
 
-  // --- Lógica da Tabela Principal Arrastável (sem alteração) ---
+  // --- MUDANÇA 7: Nova função para renderizar os Filtros Financeiros ---
+  const renderFinancialFilters = () => {
+    // Só renderiza se for "Financeiro" e tiver resultados
+    if (type !== "Financeiro" || !results || results.length === 0) {
+      return null;
+    }
+
+    console.log("[Modo Turbo] Renderizando filtros financeiros...");
+
+    return (
+      <div className="bg-card rounded-lg p-4 shadow-subtle mb-6 flex flex-col md:flex-row gap-4">
+        {/* Filtro de Curso */}
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="filtro-curso">Filtrar por Curso</Label>
+          <Select
+            value={financeiroCursoFiltro}
+            onValueChange={setFinanceiroCursoFiltro}
+          >
+            <SelectTrigger id="filtro-curso" className="w-full">
+              <SelectValue placeholder="Selecione um curso..." />
+            </SelectTrigger>
+            <SelectContent>
+              {financeiroFiltroOpcoes.cursos.map((curso) => (
+                <SelectItem key={curso} value={curso}>
+                  {curso}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Filtro de Status */}
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="filtro-status">Filtrar por Status</Label>
+          <Select
+            value={financeiroStatusFiltro}
+            onValueChange={setFinanceiroStatusFiltro}
+          >
+            <SelectTrigger id="filtro-status" className="w-full">
+              <SelectValue placeholder="Selecione um status..." />
+            </SelectTrigger>
+            <SelectContent>
+              {financeiroFiltroOpcoes.status.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  };
+  // --- FIM DA MUDANÇA 7 ---
+
+  // --- Lógica da Tabela Principal Arrastável ---
   const columns = useMemo<ColumnDef<any>[]>(() => {
+    // --- MUDANÇA 8: Usar 'filteredResults' aqui ---
+    // (O 'filteredResults' já contém os 'results' originais se não for a aba financeiro)
     if (type === "Relatórios") return [];
-    if (!results || results.length === 0) {
+    if (!filteredResults || filteredResults.length === 0) {
       return [];
     }
+    // --- FIM DA MUDANÇA 8 ---
+
     let headers: string[] = [];
     switch (type) {
       case "Certificado":
@@ -527,18 +645,20 @@ export default function SearchModule({
           },
         }));
       case "Pessoa":
-        headers = pessoaTableHeaders.filter((key) => key in results[0]);
+        headers = pessoaTableHeaders.filter((key) => key in filteredResults[0]);
         break;
       case "Ocorrência":
-        headers = ocorrenciaTableHeaders.filter((key) => key in results[0]);
+        headers = ocorrenciaTableHeaders.filter(
+          (key) => key in filteredResults[0]
+        );
         break;
       case "Requerimento":
-        headers = Object.keys(results[0]).filter(
+        headers = Object.keys(filteredResults[0]).filter(
           (key) => !requerimentoColunasRemovidas.includes(key)
         );
         break;
       default:
-        headers = Object.keys(results[0]);
+        headers = Object.keys(filteredResults[0]);
         break;
     }
     return headers.map((key) => {
@@ -552,7 +672,7 @@ export default function SearchModule({
         },
       };
     });
-  }, [type, results]);
+  }, [type, filteredResults]); // <-- MUDANÇA: Depende de 'filteredResults'
 
   useEffect(() => {
     if (type !== "Relatórios") {
@@ -561,7 +681,9 @@ export default function SearchModule({
   }, [columns, type]);
 
   const table = useReactTable({
-    data: results || [],
+    // --- MUDANÇA 9: Passar 'filteredResults' para a tabela ---
+    data: filteredResults || [],
+    // --- FIM DA MUDANÇA 9 ---
     columns,
     getCoreRowModel: getCoreRowModel(),
     state: {
@@ -592,8 +714,7 @@ export default function SearchModule({
   const columnOrderIds = useMemo(() => columnOrder, [columnOrder]);
   // --- FIM da Lógica da Tabela Principal ---
 
-  // --- Funções do Construtor de Relatórios (Atualizadas) ---
-
+  // --- Funções do Construtor de Relatórios (Sem alteração) ---
   const getActiveReportCols = () => {
     return REPORT_COLUMNS.map((col) => col.id).filter(
       (key) => reportSelectedCols[key]
@@ -625,10 +746,6 @@ export default function SearchModule({
     } else {
       params.set("preview", "true");
     }
-
-    // Retorna a URL *relativa* ou *absoluta* base.
-    // O apiFetch (para preview) e o window.location (para export)
-    // precisam da URL completa.
     return `http://localhost:5000/api/report_builder?${params.toString()}`;
   };
 
@@ -644,9 +761,7 @@ export default function SearchModule({
     }
 
     try {
-      // --- MUDANÇA: Trocar 'fetch' por 'apiFetch' ---
       const response = await apiFetch(url);
-      // --- FIM DA MUDANÇA ---
 
       if (!response.ok) {
         const data = await response.json();
@@ -676,27 +791,6 @@ export default function SearchModule({
       return;
     }
 
-    // --- MUDANÇA: Anexar o token na URL para download ---
-    // window.location.href não envia 'Authorization header'.
-    // Temos que enviar o token como um parâmetro de URL.
-    // Isso é menos seguro, mas é a forma mais simples de autenticar um download.
-    // *Vamos ajustar o backend para aceitar isso!*
-
-    // const token = localStorage.getItem("accessToken");
-    // const urlComToken = `${url}&token=${token}`; // Precisamos que o backend leia isso
-
-    // *Correção*: A forma mais segura é usar fetch e baixar o blob.
-    // Mas vamos manter 'window.location.href' por simplicidade,
-    // mas o backend precisará ser ajustado.
-
-    // *Decisão de Design*: Vamos voltar e ajustar o backend para
-    // que o /api/report_builder (com export=true) leia o token
-    // do header. Se o usuário estiver logado, o navegador
-    // *deve* enviar o cookie de token (se estivermos usando).
-    // Ah, estamos usando localStorage!
-
-    // *Plano B*: Usar fetch para baixar o arquivo.
-
     const downloadFile = async () => {
       try {
         const response = await apiFetch(url); // apiFetch VAI enviar o token
@@ -720,7 +814,6 @@ export default function SearchModule({
     };
 
     downloadFile();
-    // --- FIM DA MUDANÇA ---
   };
 
   // Tabela de Preview (useMemo)
@@ -924,7 +1017,9 @@ export default function SearchModule({
   // Tabela Padrão (agora com condicional)
   const renderNewTable = () => {
     if (type === "Relatórios") return null;
-    if (isLoading && !results) {
+
+    // --- MUDANÇA 10: Usar 'filteredResults' para checagem de loading e erro ---
+    if (isLoading && !filteredResults) {
       return (
         <div className="flex justify-center items-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -949,6 +1044,7 @@ export default function SearchModule({
         </div>
       );
     }
+    // Usa 'results' para "Nenhum resultado" (original) e 'filteredResults' para a tabela
     if (results !== null && results.length === 0) {
       return (
         <div className="bg-card rounded-lg p-8 text-center shadow-subtle">
@@ -959,7 +1055,25 @@ export default function SearchModule({
         </div>
       );
     }
-    if (results !== null && results.length > 0) {
+
+    // Se a tabela filtrada está vazia, mas a original não, mostra aviso
+    if (
+      filteredResults !== null &&
+      filteredResults.length === 0 &&
+      results &&
+      results.length > 0
+    ) {
+      return (
+        <div className="bg-card rounded-lg p-8 text-center shadow-subtle">
+          <p className="text-muted-foreground">
+            Nenhum resultado encontrado para os filtros selecionados.
+          </p>
+        </div>
+      );
+    }
+
+    if (filteredResults !== null && filteredResults.length > 0) {
+      // --- FIM DA MUDANÇA 10 ---
       return (
         <DndContext
           collisionDetection={closestCenter}
@@ -1035,7 +1149,7 @@ export default function SearchModule({
     return null;
   };
 
-  // --- MUDANÇA: Render Principal com lógica condicional ---
+  // --- MUDANÇA 11: Render Principal com lógica condicional ATUALIZADA ---
   return (
     <>
       <Dialog
@@ -1058,6 +1172,10 @@ export default function SearchModule({
 
           {/* Renderiza o CONSTRUTOR DE RELATÓRIO se for a aba certa */}
           {type === "Relatórios" && renderReportBuilder()}
+
+          {/* --- MUDANÇA 11.1: Renderiza os NOVOS FILTROS FINANCEIROS --- */}
+          {renderFinancialFilters()}
+          {/* --- FIM DA MUDANÇA 11.1 --- */}
 
           {/* Renderiza a Tabela de Preview (se Relatórios) OU a Tabela Principal (outras abas) */}
           {type === "Relatórios"
