@@ -1,19 +1,18 @@
 // src/pages/Dashboard.tsx
-// (Arquivo completo com busca de sugestões em tempo real)
+// (Arquivo completo com correção de foco)
 
-import { useState, useEffect } from "react"; // <-- MUDANÇA: Adicionado useEffect
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
 import SearchModule from "@/components/SearchModule";
-import { Search, Loader2, User } from "lucide-react"; // <-- MUDANÇA: Adicionado User
+import { Search, Loader2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_BASE_URL } from "@/lib/api";
 
-// --- MUDANÇA: Adicionar Popover e Command ---
 import {
   Popover,
   PopoverContent,
@@ -25,17 +24,15 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-// --- FIM DA MUDANÇA ---
 
 // Tipo para os resultados de todas as seções
 type AllResultsState = Record<string, any[]>;
 
-// --- MUDANÇA: Tipo para as Sugestões ---
+// Tipo para as Sugestões
 interface Suggestion {
   cod_pessoa: string;
   nome: string;
 }
-// --- FIM DA MUDANÇA ---
 
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("Pessoa");
@@ -49,14 +46,13 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- MUDANÇA: Estados para Sugestões ---
+  // --- Estados para Sugestões ---
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  // --- FIM DA MUDANÇA ---
 
-  // --- MUDANÇA: Debounce para a busca de sugestões ---
+  // Debounce para a busca de sugestões
   useEffect(() => {
     // Define um timer de 300ms
     const handler = setTimeout(() => {
@@ -70,7 +66,7 @@ export default function Dashboard() {
     };
   }, [query]); // Roda toda vez que a 'query' (digitação) muda
 
-  // --- MUDANÇA: Efeito para buscar sugestões ---
+  // Efeito para buscar sugestões
   useEffect(() => {
     // Função que busca as sugestões na nova API
     const fetchSuggestions = async () => {
@@ -87,7 +83,7 @@ export default function Dashboard() {
       setIsSuggestionsLoading(true);
 
       try {
-        const apiUrl = `http://localhost:5000/api/search/suggestions?q=${encodeURIComponent(
+        const apiUrl = `${API_BASE_URL}/api/search/suggestions?q=${encodeURIComponent(
           debouncedQuery
         )}&cpf=${isCpfSearch}`;
 
@@ -110,9 +106,8 @@ export default function Dashboard() {
 
     fetchSuggestions();
   }, [debouncedQuery, isCpfSearch]); // Roda quando o 'debouncedQuery' ou o modo CPF mudam
-  // --- FIM DA MUDANÇA ---
 
-  // --- MUDANÇA: Refatorado para ser uma função interna reutilizável ---
+  // Função interna de busca
   const handleSearchInternal = async (
     searchTerm: string,
     searchIsCpf: boolean
@@ -132,7 +127,7 @@ export default function Dashboard() {
     setSuggestions([]); // Limpa sugestões
 
     try {
-      const apiUrl = `http://localhost:5000/api/search/all?q=${encodeURIComponent(
+      const apiUrl = `${API_BASE_URL}/api/search/all?q=${encodeURIComponent(
         searchTerm
       )}&cpf=${searchIsCpf}`;
 
@@ -169,14 +164,13 @@ export default function Dashboard() {
     }
   };
 
-  // --- MUDANÇA: Funções de clique e tecla atualizadas ---
-  // Botão "Buscar" usa o que está no estado atual
+  // Botão "Buscar"
   const handleSearchClick = () => {
     console.log("[Modo Turbo Dashboard] Botão 'Buscar' clicado.");
     handleSearchInternal(query, isCpfSearch);
   };
 
-  // Enter no input usa o que está no estado atual
+  // Enter no input
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       console.log("[Modo Turbo Dashboard] 'Enter' pressionado.");
@@ -196,7 +190,6 @@ export default function Dashboard() {
     //    e garantindo que o modo CPF esteja FALSO
     handleSearchInternal(suggestion.cod_pessoa, false);
   };
-  // --- FIM DA MUDANÇA ---
 
   const handleSectionChange = (section: string) => {
     if (section === "Configuracoes") {
@@ -233,7 +226,6 @@ export default function Dashboard() {
               Buscar Aluno (Global)
             </h2>
 
-            {/* --- MUDANÇA: Envolver a busca no Popover --- */}
             <div className="flex flex-col gap-4">
               <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                 <div className="flex gap-3">
@@ -297,6 +289,14 @@ export default function Dashboard() {
                 <PopoverContent
                   className="w-[--radix-popover-trigger-width] p-0"
                   align="start"
+                  // --- MUDANÇA: ADICIONE ESTA LINHA ---
+                  onOpenAutoFocus={(e) => {
+                    console.log(
+                      "[Modo Turbo Popover] Impedindo auto-foco para manter o foco no input."
+                    );
+                    e.preventDefault();
+                  }}
+                  // --- FIM DA MUDANÇA ---
                 >
                   <Command>
                     <CommandList>
@@ -327,7 +327,6 @@ export default function Dashboard() {
                 </PopoverContent>
               </Popover>
             </div>
-            {/* --- FIM DA MUDANÇA --- */}
           </div>
 
           <SearchModule

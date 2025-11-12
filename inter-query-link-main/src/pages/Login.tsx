@@ -1,3 +1,6 @@
+// src/pages/Login.tsx
+// (Arquivo completo)
+
 import { useState } from "react";
 // --- MUDANÇA: Importar hooks de navegação e redirecionamento ---
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
@@ -8,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { API_BASE_URL } from "@/lib/api"; // <-- MUDANÇA: Importar a URL Base
 
 export default function Login() {
   const [login, setLogin] = useState("");
@@ -33,7 +37,9 @@ export default function Login() {
     console.log(`[Login] Tentando logar com: ${login}`);
 
     try {
-      const response = await fetch("http://localhost:5000/api/login", {
+      // --- MUDANÇA: Usar a API_BASE_URL ---
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
+        // --- FIM DA MUDANÇA ---
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ login, senha }),

@@ -1,5 +1,5 @@
 // src/components/SearchModule.tsx
-// (Arquivo completo com a correção de tipo do TypeScript)
+// (Arquivo completo)
 
 // --- MUDANÇA 1: Importar 'CSSProperties' ---
 import { useState, useMemo, FC, useEffect, CSSProperties } from "react";
@@ -69,7 +69,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_BASE_URL } from "@/lib/api"; // <-- MUDANÇA: Importar API_BASE_URL
 
 interface SearchModuleProps {
   type: string;
@@ -268,9 +268,11 @@ export default function SearchModule({
         console.log("[Modo Turbo] Buscando filtros de Curso e Consultor...");
         setReportLoading(true);
         try {
+          // --- MUDANÇA: Usar a API_BASE_URL ---
           const cursoResponse = await apiFetch(
-            "http://localhost:5000/api/report_filters/cursos"
+            `${API_BASE_URL}/api/report_filters/cursos`
           );
+          // --- FIM DA MUDANÇA ---
           if (cursoResponse.ok) {
             const cursoData = await cursoResponse.json();
             setCursoList(["Todos", ...cursoData]);
@@ -279,9 +281,11 @@ export default function SearchModule({
             toast.error("Erro ao carregar lista de cursos.");
           }
 
+          // --- MUDANÇA: Usar a API_BASE_URL ---
           const consultorResponse = await apiFetch(
-            "http://localhost:5000/api/report_filters/consultores"
+            `${API_BASE_URL}/api/report_filters/consultores`
           );
+          // --- FIM DA MUDANÇA ---
           if (consultorResponse.ok) {
             const consultorData = await consultorResponse.json();
             setConsultorList(["Todos", ...consultorData]);
@@ -316,7 +320,7 @@ export default function SearchModule({
     }
   }, [type, results]);
 
-  // Função para Salvar Ocorrência (Sem alteração)
+  // Função para Salvar Ocorrência
   const handleSalvarOcorrencia = async () => {
     if (!novaDescricao) {
       toast.error("Por favor, preencha o campo 'Ocorrência'.");
@@ -337,9 +341,11 @@ export default function SearchModule({
     );
     setIsSubmitting(true);
     try {
+      // --- MUDANÇA: Usar a API_BASE_URL ---
       const response = await apiFetch(
-        "http://localhost:5000/api/ocorrencia/nova",
+        `${API_BASE_URL}/api/ocorrencia/nova`,
         {
+          // --- FIM DA MUDANÇA ---
           method: "POST",
           body: JSON.stringify({
             matricula_aluno: matricula_aluno,
@@ -713,7 +719,7 @@ export default function SearchModule({
   const columnOrderIds = useMemo(() => columnOrder, [columnOrder]);
   // --- FIM da Lógica da Tabela Principal ---
 
-  // --- Funções do Construtor de Relatórios (Sem alteração) ---
+  // --- Funções do Construtor de Relatórios ---
   const getActiveReportCols = () => {
     return REPORT_COLUMNS.map((col) => col.id).filter(
       (key) => reportSelectedCols[key]
@@ -745,7 +751,9 @@ export default function SearchModule({
     } else {
       params.set("preview", "true");
     }
-    return `http://localhost:5000/api/report_builder?${params.toString()}`;
+    // --- MUDANÇA: Usar a API_BASE_URL ---
+    return `${API_BASE_URL}/api/report_builder?${params.toString()}`;
+    // --- FIM DA MUDANÇA ---
   };
 
   const handleUpdatePreview = async () => {

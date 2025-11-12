@@ -1,11 +1,11 @@
 // src/pages/Configuracoes.tsx
-// (Arquivo completo com a correção de navegação)
+// (Arquivo completo)
 
 // --- MUDANÇA 1: Importar o 'useNavigate' ---
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"; // <-- ADICIONADO
 import Sidebar from "@/components/Sidebar";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_BASE_URL } from "@/lib/api"; // <-- MUDANÇA: Importar API_BASE_URL
 import { toast } from "sonner";
 import {
   Card,
@@ -58,7 +58,9 @@ export default function Configuracoes() {
   const [senha, setSenha] = useState("");
   const [role, setRole] = useState<"User" | "Admin">("User");
 
-  const API_URL = "http://localhost:5000/api/colaboradores";
+  // --- MUDANÇA: Usar a API_BASE_URL ---
+  const API_URL = `${API_BASE_URL}/api/colaboradores`;
+  // --- FIM DA MUDANÇA ---
 
   // Função para buscar os dados
   const fetchColaboradores = async () => {
