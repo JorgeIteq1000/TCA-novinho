@@ -6,3 +6,4 @@ reportlab
 Flask-JWT-Extended~=4.4.0
 Werkzeug~=2.0.0
 PyJWT~=2.3.0
+waitress

@@ -1,7 +1,10 @@
 // src/components/SearchModule.tsx
-// (Arquivo completo com nova coluna "Financeiro" nos Relatórios)
+// (Arquivo completo com a correção de tipo do TypeScript)
 
-import { useState, useMemo, FC, useEffect } from "react";
+// --- MUDANÇA 1: Importar 'CSSProperties' ---
+import { useState, useMemo, FC, useEffect, CSSProperties } from "react";
+// --- FIM DA MUDANÇA 1 ---
+
 import { Search, Loader2, Plus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,7 +81,7 @@ interface SearchModuleProps {
   pessoaInfo: any | null;
 }
 
-// --- MUDANÇA 1: Adicionar 'financeiro_status' à lista ---
+// Lista Mestra de Colunas (igual ao backend)
 const REPORT_COLUMNS = [
   { id: "cod_pessoa", label: "Matrícula" },
   { id: "nome", label: "Nome" },
@@ -87,7 +90,7 @@ const REPORT_COLUMNS = [
   { id: "email", label: "Email" },
   { id: "curso_nome", label: "Curso" },
   { id: "consultor", label: "Consultor" },
-  { id: "financeiro_status", label: "Financeiro" }, // <-- ADICIONADO AQUI
+  { id: "financeiro_status", label: "Financeiro" },
   { id: "fone_residencial", label: "Telefone Residencial" },
   { id: "nascimento_data", label: "Nascimento" },
   { id: "Sexo", label: "Sexo" },
@@ -98,7 +101,6 @@ const REPORT_COLUMNS = [
   { id: "estado_residencial", label: "Estado" },
   { id: "cep_residencial", label: "CEP" },
 ];
-// --- FIM DA MUDANÇA 1 ---
 
 // Constantes de colunas (sem alteração)
 const certificadoTableHeaders = [
@@ -177,7 +179,9 @@ const requerimentoColunasRemovidas = [
   "data_hora_log",
 ];
 
-// Componente de Cabeçalho Arrastável (sem alterações)
+const TABS_COM_FILTRO_CURSO = ["Financeiro", "Nota/Falta", "Requerimento"];
+
+// Componente de Cabeçalho Arrastável
 const DraggableColumnHeader: FC<{ header: Header<any, unknown> }> = ({
   header,
 }) => {
@@ -185,7 +189,9 @@ const DraggableColumnHeader: FC<{ header: Header<any, unknown> }> = ({
     useSortable({
       id: header.column.id,
     });
-  const style = {
+
+  // --- MUDANÇA 2: Tipar explicitamente o objeto 'style' ---
+  const style: CSSProperties = {
     opacity: isDragging ? 0.8 : 1,
     transform: CSS.Translate.toString(transform),
     transition: "transform 0.2s ease-in-out",
@@ -193,10 +199,12 @@ const DraggableColumnHeader: FC<{ header: Header<any, unknown> }> = ({
     position: "relative",
     cursor: "grab",
   };
+  // --- FIM DA MUDANÇA 2 ---
+
   return (
     <TableHead
       ref={setNodeRef}
-      style={style}
+      style={style} // <-- Agora 'style' tem o tipo correto
       {...attributes}
       {...listeners}
       className="px-6 py-3 text-left text-sm font-semibold text-foreground capitalize whitespace-nowrap"
@@ -226,7 +234,6 @@ export default function SearchModule({
   const dataDeHoje = new Date().toLocaleDateString("pt-BR");
 
   // Estados do Construtor de Relatórios
-  // --- MUDANÇA 2: Adicionar 'financeiro_status' à seleção padrão ---
   const [reportSelectedCols, setReportSelectedCols] = useState<
     Record<string, boolean>
   >(() => {
@@ -237,12 +244,11 @@ export default function SearchModule({
         "celular",
         "curso_nome",
         "consultor",
-        "financeiro_status", // <-- ADICIONADO AQUI
+        "financeiro_status",
       ].includes(col.id);
     });
     return initial;
   });
-  // --- FIM DA MUDANÇA 2 ---
   const [reportPreviewData, setReportPreviewData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [cursoList, setCursoList] = useState<string[]>(["Todos"]);
@@ -250,9 +256,8 @@ export default function SearchModule({
   const [selectedCurso, setSelectedCurso] = useState<string>("Todos");
   const [selectedConsultor, setSelectedConsultor] = useState<string>("Todos");
 
-  // Estados dos Filtros Financeiros
-  const [financeiroCursoFiltro, setFinanceiroCursoFiltro] =
-    useState<string>("Todos");
+  // Estados dos Filtros
+  const [cursoFiltro, setCursoFiltro] = useState<string>("Todos");
   const [financeiroStatusFiltro, setFinanceiroStatusFiltro] =
     useState<string>("Todos");
 
@@ -301,17 +306,17 @@ export default function SearchModule({
     }
   }, [type, query]);
 
-  // useEffect para resetar os filtros financeiros
+  // useEffect para resetar os filtros
   useEffect(() => {
-    console.log("[Modo Turbo] Verificando reset de filtros financeiros...");
-    if (type === "Financeiro") {
-      setFinanceiroCursoFiltro("Todos");
+    console.log("[Modo Turbo] Verificando reset de filtros...");
+    if (TABS_COM_FILTRO_CURSO.includes(type)) {
+      setCursoFiltro("Todos");
       setFinanceiroStatusFiltro("Todos");
-      console.log("[Modo Turbo] Filtros financeiros resetados.");
+      console.log(`[Modo Turbo] Filtros para ${type} resetados.`);
     }
   }, [type, results]);
 
-  // Função para Salvar Ocorrência (Atualizada)
+  // Função para Salvar Ocorrência (Sem alteração)
   const handleSalvarOcorrencia = async () => {
     if (!novaDescricao) {
       toast.error("Por favor, preencha o campo 'Ocorrência'.");
@@ -373,28 +378,30 @@ export default function SearchModule({
     }
   };
 
-  // Função para formatar o nome da chave (sem alterações)
+  // Função para formatar o nome da chave (Sem alteração)
   const formatHeader = (key: string) => {
     if (key === "cpf_cnpj") return "CPF/CNPJ";
     if (key === "matricula_aluno") return "Matrícula Aluno";
     if (key === "curso_nome") return "Curso";
-    if (key === "financeiro_status") return "Financeiro"; // <-- MUDANÇA 3: Tratar o novo label
+    if (key === "financeiro_status") return "Financeiro";
     return key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
   // Lógica para pegar opções de filtro
-  const financeiroFiltroOpcoes = useMemo(() => {
-    if (type !== "Financeiro" || !results) {
+  const filtroOpcoes = useMemo(() => {
+    if (!TABS_COM_FILTRO_CURSO.includes(type) || !results) {
       return { cursos: [], status: [] };
     }
-    console.log("[Modo Turbo] Gerando opções de filtro para Financeiro...");
+    console.log(`[Modo Turbo] Gerando opções de filtro para ${type}...`);
 
     const cursos = new Set<string>();
     const status = new Set<string>();
 
     results.forEach((item) => {
       if (item.nome_curso) cursos.add(item.nome_curso);
-      if (item.status) status.add(item.status);
+      if (type === "Financeiro" && item.status) {
+        status.add(item.status);
+      }
     });
 
     return {
@@ -405,28 +412,29 @@ export default function SearchModule({
 
   // Lógica para filtrar os resultados
   const filteredResults = useMemo(() => {
-    if (type !== "Financeiro" || !results) {
+    if (!TABS_COM_FILTRO_CURSO.includes(type) || !results) {
       return results;
     }
 
     console.log(
-      `[Modo Turbo] Filtrando resultados financeiros... Curso: ${financeiroCursoFiltro}, Status: ${financeiroStatusFiltro}`
+      `[Modo Turbo] Filtrando resultados... Curso: ${cursoFiltro}, Status (Fin): ${financeiroStatusFiltro}`
     );
 
     return results.filter((item) => {
       const cursoMatch =
-        financeiroCursoFiltro === "Todos" ||
-        item.nome_curso === financeiroCursoFiltro;
+        cursoFiltro === "Todos" || item.nome_curso === cursoFiltro;
+
       const statusMatch =
+        type !== "Financeiro" ||
         financeiroStatusFiltro === "Todos" ||
         item.status === financeiroStatusFiltro;
+
       return cursoMatch && statusMatch;
     });
-  }, [results, type, financeiroCursoFiltro, financeiroStatusFiltro]);
+  }, [results, type, cursoFiltro, financeiroStatusFiltro]);
 
   // Renderiza o conteúdo do modal de DETALHES (sem alterações)
   const renderModalContent = () => {
-    // ... (lógica do modal de detalhes, sem alteração)
     if (!selectedItem) return null;
     const camposPrincipais = Object.entries(selectedItem).filter(
       ([key]) =>
@@ -561,55 +569,60 @@ export default function SearchModule({
     );
   };
 
-  // Função para renderizar os Filtros Financeiros
-  const renderFinancialFilters = () => {
-    if (type !== "Financeiro" || !results || results.length === 0) {
+  // Função para renderizar os Filtros Dinâmicos
+  const renderDynamicFilters = () => {
+    if (
+      !TABS_COM_FILTRO_CURSO.includes(type) ||
+      !results ||
+      results.length === 0
+    ) {
       return null;
     }
 
-    console.log("[Modo Turbo] Renderizando filtros financeiros...");
+    console.log("[Modo Turbo] Renderizando filtros dinâmicos...");
 
     return (
       <div className="bg-card rounded-lg p-4 shadow-subtle mb-6 flex flex-col md:flex-row gap-4">
-        {/* Filtro de Curso */}
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="filtro-curso">Filtrar por Curso</Label>
-          <Select
-            value={financeiroCursoFiltro}
-            onValueChange={setFinanceiroCursoFiltro}
-          >
-            <SelectTrigger id="filtro-curso" className="w-full">
-              <SelectValue placeholder="Selecione um curso..." />
-            </SelectTrigger>
-            <SelectContent>
-              {financeiroFiltroOpcoes.cursos.map((curso) => (
-                <SelectItem key={curso} value={curso}>
-                  {curso}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Filtro de Curso (Renderiza se houver cursos) */}
+        {filtroOpcoes.cursos.length > 1 && (
+          <div className="flex-1 space-y-2">
+            <Label htmlFor="filtro-curso">Filtrar por Curso</Label>
+            <Select value={cursoFiltro} onValueChange={setCursoFiltro}>
+              <SelectTrigger id="filtro-curso" className="w-full">
+                <SelectValue placeholder="Selecione um curso..." />
+              </SelectTrigger>
+              <SelectContent>
+                {filtroOpcoes.cursos.map((curso) => (
+                  <SelectItem key={curso} value={curso}>
+                    {curso}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
-        {/* Filtro de Status */}
-        <div className="flex-1 space-y-2">
-          <Label htmlFor="filtro-status">Filtrar por Status</Label>
-          <Select
-            value={financeiroStatusFiltro}
-            onValueChange={setFinanceiroStatusFiltro}
-          >
-            <SelectTrigger id="filtro-status" className="w-full">
-              <SelectValue placeholder="Selecione um status..." />
-            </SelectTrigger>
-            <SelectContent>
-              {financeiroFiltroOpcoes.status.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Filtro de Status (SÓ para Financeiro) */}
+        {type === "Financeiro" && filtroOpcoes.status.length > 1 && (
+          <div className="flex-1 space-y-2">
+            <Label htmlFor="filtro-status">Filtrar por Status</Label>
+            <Select
+              value={financeiroStatusFiltro}
+              onValueChange={setFinanceiroStatusFiltro}
+            >
+              <SelectTrigger id="filtro-status" className="w-full">
+                <SelectValue placeholder="Selecione um status..." />
+              </SelectTrigger>
+              <SelectContent>
+                {filtroOpcoes.status.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     );
   };
@@ -779,7 +792,7 @@ export default function SearchModule({
 
     const downloadFile = async () => {
       try {
-        const response = await apiFetch(url); // apiFetch VAI enviar o token
+        const response = await apiFetch(url);
         if (!response.ok) {
           throw new Error("Falha no download");
         }
@@ -810,9 +823,7 @@ export default function SearchModule({
       return {
         id: colId,
         accessorKey: colId,
-        // --- MUDANÇA 4: Usar o 'formatHeader' aqui também ---
         header: colConfig ? colConfig.label : formatHeader(colId),
-        // --- FIM DA MUDANÇA 4 ---
         cell: ({ row }) => {
           const value = row.getValue(colId);
           return value !== null && value !== undefined ? String(value) : "N/A";
@@ -890,9 +901,7 @@ export default function SearchModule({
         {/* Seleção de Colunas */}
         <div className="space-y-4">
           <Label className="font-semibold">2. Selecione as Colunas</Label>
-          {/* --- MUDANÇA 5: Aumentar o grid para caber a nova coluna --- */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 p-4 border rounded-md">
-            {/* --- FIM DA MUDANÇA 5 --- */}
             {REPORT_COLUMNS.map((col) => (
               <div key={col.id} className="flex items-center space-x-2">
                 <Checkbox
@@ -1155,7 +1164,10 @@ export default function SearchModule({
           )}
 
           {type === "Relatórios" && renderReportBuilder()}
-          {renderFinancialFilters()}
+
+          {/* Esta função agora cuida de todas as abas com filtro */}
+          {renderDynamicFilters()}
+
           {type === "Relatórios"
             ? renderReportPreviewTable()
             : renderNewTable()}
