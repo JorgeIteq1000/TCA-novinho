@@ -7,8 +7,11 @@ import io
 import csv
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+# --- MUDANÇA: Imports de Autenticação Atualizados ---
+# 'verify_jwt_in_request' e 'wraps' não são mais necessários
 from flask_jwt_extended import create_access_token, get_jwt, get_jwt_identity, jwt_required, JWTManager
 from werkzeug.security import check_password_hash, generate_password_hash 
+# --- FIM DA MUDANÇA ---
 
 # --- Configuração do Logging ---
 logging.basicConfig(level=logging.DEBUG)
@@ -596,7 +599,7 @@ def search_all_sections():
     logging.info(f"[API GLOBAL] Retornando resultados para {len(all_results)} seções.")
     return jsonify(all_results)
 
-# --- (NOVO) Endpoint /api/search/suggestions (PROTEGIDO) ---
+# --- Endpoint /api/search/suggestions (PROTEGIDO) ---
 @app.route('/api/search/suggestions', methods=['GET'])
 @jwt_required()
 def search_suggestions():
@@ -604,30 +607,21 @@ def search_suggestions():
     is_cpf_search = request.args.get('cpf') == 'true'
     
     if not query_param or len(query_param) < 3:
-        # Não busca por menos de 3 caracteres
         return jsonify([])
 
     logging.info(f"[API SUGESTÕES] Buscando por: {query_param}, Modo CPF: {is_cpf_search}")
     
     try:
         if is_cpf_search:
-            # Se for CPF, usa a query de CPF da "Pessoa"
             sql_query = queries["Pessoa"][3] # 4. cpf_query
             params = (f'%{query_param}%',)
         else:
-            # Se não, usa a query de sugestão padrão (nome ou matricula)
             sql_query = queries["Pessoa"][0] # 1. suggest_query
             param_like = f'%{query_param}%'
             params = (param_like, param_like)
             
         results = search_database(sql_query, params)
         
-        # O frontend espera 'cod_pessoa' e 'nome'
-        # A suggest_query[0] já retorna isso. A cpf_query[3] retorna mais,
-        # então vamos garantir que o formato seja o
-        # { "cod_pessoa": "123", "nome": "Aluno" }
-        
-        # Limita a 10 resultados para o dropdown
         sugestoes_formatadas = [
             {"cod_pessoa": row["cod_pessoa"], "nome": row["nome"]}
             for row in results[:10]
@@ -639,7 +633,6 @@ def search_suggestions():
     except Exception as e:
         logging.error(f"[API SUGESTÕES] Erro ao buscar sugestões: {e}")
         return jsonify({"error": str(e)}), 500
-# --- FIM DO NOVO ENDPOINT ---
 
 
 # --- Endpoint /api/ocorrencia/nova (PROTEGIDO E AUTOMATIZADO) ---
@@ -680,14 +673,16 @@ MASTER_COLUMN_LABELS = {
     'bairro_residencial': 'Bairro', 'cidade_residencial': 'Cidade', 'estado_residencial': 'Estado',
     'cep_residencial': 'CEP', 'fone_residencial': 'Telefone Residencial', 'celular': 'Celular',
     'email': 'Email', 'rg': 'RG', 'cpf_cnpj': 'CPF/CNPJ', 'nascimento_data': 'Nascimento',
-    'curso_nome': 'Curso', 'consultor': 'Consultor'
+    'curso_nome': 'Curso', 'consultor': 'Consultor',
+    'financeiro_status': 'Financeiro'
 }
 MASTER_COLUMN_MAP = {
     'cod_pessoa': 'p.cod_pessoa', 'nome': 'p.nome', 'Sexo': 'p.Sexo', 'endereco_residencial': 'p.endereco_residencial',
     'bairro_residencial': 'p.bairro_residencial', 'cidade_residencial': 'p.cidade_residencial', 'estado_residencial': 'p.estado_residencial',
     'cep_residencial': 'p.cep_residencial', 'fone_residencial': 'p.fone_residencial', 'celular': 'p.celular',
     'email': 'p.email', 'rg': 'p.rg', 'cpf_cnpj': 'p.cpf_cnpj', 'nascimento_data': 'p.nascimento_data',
-    'curso_nome': 'c.nome', 'consultor': 'm.consultor'
+    'curso_nome': 'c.nome', 'consultor': 'm.consultor',
+    'financeiro_status': "ISNULL(fin.status_financeiro, '0/0')"
 }
 
 @app.route('/api/report_filters/cursos', methods=['GET'])
@@ -742,13 +737,34 @@ def report_builder():
             return jsonify({"error": "Nenhuma coluna válida selecionada"}), 400
         top_clause = "TOP 5" if is_preview else ""
         cols_sql = ", ".join([f"{MASTER_COLUMN_MAP[col]} AS {col}" for col in validated_cols])
+        
+        # --- MUDANÇA 1: Query SQL ATUALIZADA ---
+        # A subquery 'fin' agora agrupa por 'cod_pessoa' E 'cod_curso'
+        # O JOIN principal agora usa 'p.cod_pessoa' E 't.cod_curso'
         query = f"""
             SELECT DISTINCT {top_clause} {cols_sql} 
             FROM dbo.pessoa p
             LEFT JOIN dbo.matricula m ON p.cod_pessoa = m.matricula_aluno
             LEFT JOIN dbo.turma t ON m.cod_turma = t.cod_turma
             LEFT JOIN dbo.curso c ON t.cod_curso = c.cod_curso
+            
+            -- INÍCIO DO JOIN ATUALIZADO --
+            LEFT JOIN (
+                SELECT
+                    cb.cod_pessoa,
+                    t_fin.cod_curso, -- Adiciona o cod_curso
+                    CAST(SUM(CASE WHEN cb.status = 'PG' THEN 1 ELSE 0 END) AS VARCHAR) + '/' + CAST(COUNT(*) AS VARCHAR) AS status_financeiro
+                FROM
+                    dbo.cobranca cb
+                JOIN
+                    dbo.turma t_fin ON cb.cod_turma = t_fin.cod_turma -- Faz JOIN com turma para pegar o curso
+                GROUP BY
+                    cb.cod_pessoa, t_fin.cod_curso -- Agrupa por pessoa E por curso
+            ) AS fin ON p.cod_pessoa = fin.cod_pessoa AND t.cod_curso = fin.cod_curso -- CONDIÇÃO DE JOIN DUPLA
+            -- FIM DO JOIN ATUALIZADO --
         """
+        # --- FIM DA MUDANÇA 1 ---
+        
         where_clauses = []
         params = []
         if curso_filter and curso_filter != 'Todos':
@@ -757,8 +773,23 @@ def report_builder():
         if consultor_filter and consultor_filter != 'Todos':
             where_clauses.append("m.consultor = ?")
             params.append(consultor_filter)
+        
+        # --- MUDANÇA 2: Adicionar filtro financeiro se a coluna for pedida ---
+        # Se a coluna 'financeiro_status' foi pedida, E um curso foi filtrado,
+        # precisamos garantir que o JOIN financeiro só traga o curso certo.
+        # A lógica de JOIN dupla (p.cod_pessoa AND t.cod_curso) já faz isso!
+        # Quando o 'WHERE c.nome = ?' filtrar a query principal para um curso,
+        # o LEFT JOIN só vai encontrar um 'fin.status_financeiro' para aquele curso.
+        # Se o aluno tiver outros cursos, eles serão filtrados pelo 'WHERE' ou
+        # o 't.cod_curso' não vai bater no 'ON' do JOIN.
+        #
+        # Esta lógica está correta e não precisa de mais 'WHERE'.
+        # --- FIM DA MUDANÇA 2 ---
+        
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
+            
+        logging.debug(f"[API Relatório] Executando SQL: {query}")
         results = search_database(query, tuple(params)) 
         
         if is_export:
@@ -791,6 +822,7 @@ def report_builder():
                         row[key] = value.isoformat().split('T')[0]
             return jsonify(results)
     except Exception as e:
+        logging.error(f"[API Relatório] Erro: {e}")
         return jsonify({"error": str(e)}), 500
 
 
